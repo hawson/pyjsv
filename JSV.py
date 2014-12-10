@@ -18,11 +18,12 @@ class JSV( object ):
                         "SCRIPT", "CMDARGS", "USER" )
 
     def __init__(self, logging=False) :
+        import os
         self.Log = False
         if logging is True :
             self.Log = True
-            self.tempfile = tempfile.NamedTemporaryFile(prefix='jsv_', delete=False)
-            print >> sys.stderr, "Tempfile is %s" % self.tempfile.name
+            self.tempfile = tempfile.NamedTemporaryFile(prefix='jsv_%d_'%os.getpid(), delete=False)
+            #print >> sys.stderr, "Tempfile is %s" % self.tempfile.name
         self.state = "initialized"
         self.env = {}
         self.param = {}
@@ -48,34 +49,44 @@ class JSV( object ):
                 iput = sys.stdin.readline().strip('\n')
                 if len(iput) == 0:
                     continue
-                self.jsv_script_log(">>> {}".format(iput))
-                jsv_line = re.split('\s*', iput, maxsplit=3)
+                self.jsv_script_log("{} >>> {}".format(datetime.datetime.now(),iput))
+                jsv_line = re.split('\s*', iput, maxsplit=2)
+
                 if jsv_line[0] == "QUIT" :
                     _jsv_quit = True
+
                 elif jsv_line[0] == "PARAM" :
                     self.jsv_handle_param_command(jsv_line[1], jsv_line[2])
+
                 elif jsv_line[0] == "ENV" :
-                    jsv_data = re.split('\s*', jsv_line[2], maxsplits=2)
+                    jsv_data = re.split('\s*', jsv_line[2], maxsplit=2)
                     self.jsv_handle_env_command(jsv_line[1], jsv_data[0], jsv_data[1])
+
                 elif jsv_line[0] == "START" :
                     self.jsv_handle_start_command()
+                    
                 elif jsv_line[0] == "BEGIN" :
                     self.jsv_handle_begin_command()
+
                 elif jsv_line[0] == "SHOW" :
                     self.jsv_show_params()
                     self.jsv_show_envs()
+
                 else:
                     self.jsv_send_command("ERROR JSV script got unknown command " + jsv_line[0])
+
         except (EOFError) :
             pass
+
         self.jsv_script_log("{} is terminating on {}".format(sys.argv[0], datetime.datetime.now()))
+
         if self.Log:
             self.tempfile.close()
 
     def jsv_send_command(self, command):
         print(command)
         sys.stdout.flush()
-        self.jsv_script_log("<<< {}".format(command))
+        self.jsv_script_log("{} <<< {}".format(datetime.datetime.now(), command))
 
     def jsv_handle_start_command(self):
         if self.state == "initialized":
