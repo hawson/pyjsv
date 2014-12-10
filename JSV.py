@@ -16,20 +16,24 @@ class JSV( object ):
                         "binding_step", "binding_exp_n" )
     _jsv_add_params = ( "CLIENT", "CONTEXT", "GROUP", "VERSION", "JOB_ID",
                         "SCRIPT", "CMDARGS", "USER" )
+
     def __init__(self, logging=False) :
         self.Log = False
         if logging is True :
             self.Log = True
-            self.tempfile = tempfile.NamedTemporaryFile(delete=False)
+            self.tempfile = tempfile.NamedTemporaryFile(prefix='jsv_', delete=False)
+            print >> sys.stderr, "Tempfile is %s" % self.tempfile.name
         self.state = "initialized"
         self.env = {}
         self.param = {}
+
     def jsv_script_log(self, error) :
         if self.Log:
             error = "{}\n".format(error)
             if sys.version_info.major > 2:
                 error = bytes(error, encoding='utf-8')
             self.tempfile.write(error)
+
     def jsv_main( self ) :
         self.jsv_script_log("{} started on date {}".format(sys.argv[0], datetime.datetime.now()))
         self.jsv_script_log("")
@@ -67,10 +71,12 @@ class JSV( object ):
         self.jsv_script_log("{} is terminating on {}".format(sys.argv[0], datetime.datetime.now()))
         if self.Log:
             self.tempfile.close()
+
     def jsv_send_command(self, command):
         print(command)
         sys.stdout.flush()
         self.jsv_script_log("<<< {}".format(command))
+
     def jsv_handle_start_command(self):
         if self.state == "initialized":
             self.jsv_on_start()
@@ -78,6 +84,7 @@ class JSV( object ):
             self.state = "started"
         else:
             self.jsv_send_command("ERROR JSV script got START but is in state {}".format(self.state))
+
     def jsv_handle_begin_command(self):
         if self.state == "started":
             self.state = "verifying"
@@ -86,6 +93,7 @@ class JSV( object ):
             self.jsv_clear_envs()
         else:
             self.jsv_send_command("ERROR JSV script got BEGIN but is in state {}".format(self.state))
+
     def jsv_handle_param_command(self, param, value) :
         self.param[param] = {}
         if ',' in value:
@@ -102,102 +110,129 @@ class JSV( object ):
                 self.param[param][t[0]] = t[1]
             else:
                 self.param[param][value] = None
+
     def jsv_handle_env_command(self, action, name, data) :
         if action == 'DEL':
             if name in self.env.keys():
                 del(self.env[name])
         else:
             self.env[name] = data
+
     def jsv_on_verify(self):
         self.jsv_accept()
         pass
+
     def jsv_on_start(self):
         pass
+
     def jsv_accept(self, reason):
         if self.state == "verifying":
             self.jsv_send_command("RESULT STATE ACCEPT {}".format(reason))
             self.state = "initialized"
         else:
             self.jsv_send_command("ERROR JSV script tried to send RESULT but was in state {}".format(self.state))
+
     def jsv_correct(self, reason):
         if self.state == "verifying":
             self.jsv_send_command("RESULT STATE CORRECT {}".format(reason))
             self.state = "initialized"
         else:
             self.jsv_send_command("ERROR JSV script tried to send RESULT but was in state {}".format(self.state))
+
     def jsv_reject(self, reason):
         if self.state == "verifying":
             self.jsv_send_command("RESULT STATE REJECT {}".format(reason))
             self.state = "initialized"
         else:
             self.jsv_send_command("ERROR JSV script tried to send RESULT but was in state {}".format(self.state))
+
     def jsv_reject_wait(self, reason):
         if self.state == "verifying":
             self.jsv_send_command("RESULT STATE REJECT_WAIT {}".format(reason))
             self.state = "initialized"
         else:
             self.jsv_send_command("ERROR JSV script tried to send RESULT but was in state {}".format(self.state))
+
     def jsv_clear_envs(self):
         self.env = {}
+
     def jsv_clear_params(self):
         self.param = {}
+
     def jsv_is_env(self, var):
         return var in self.env.keys()
+
     def jsv_get_env(self, var):
         if self.jsv_is_env(var):
             return self.env['var']
         return None
+
     def jsv_add_env(self, var, val):
         if not self.jsv_is_env(var):
             self.env[var] = val
             self.jsv_send_command('ENV ADD {} {}'.format(var, val))
+
     def jsv_mod_env(self, var, val):
         if self.jsv_is_env(var):
             self.env[var] = val
             self.jsv_send_command('ENV MOD {} {}'.format(var, val))
+
     def jsv_del_env(self, var):
         if self.jsv_is_env(var):
             del(self.env[var])
             self.jsv_send_command('ENV DEL {}'.format(var))
+
     def jsv_show_params(self):
         for k, v in self.param:
             self.jsv_log_info("got param {}={}".format(k,v))
+
     def jsv_show_envs(self):
         for k, v in self.env:
             self.jsv_log_info("got env {}={}".format(k,v))
+
     def jsv_log_info(self, message):
         self.jsv_send_command("LOG INFO {}".format(message))
+
     def jsv_log_warning(self, message):
         self.jsv_send_command("LOG WARNING {}".format(message))
+
     def jsv_log_error(self, message):
         self.jsv_send_command("LOG ERROR {}".format(message))
+
     def jsv_send_env(self):
         self.jsv_send_command("SEND ENV")
+
     def jsv_is_param(self, param):
         return param in self.param.keys()
+
     def jsv_get_param(self, param):
         if self.jsv_is_param(param):
             if len(list(self.param[param].keys())) == 1 and self.param[param][list(self.param[param].keys())[0]] is None:
                 return list(self.param[param].keys())[0]
             return self.param[param]
         return None
+
     def jsv_set_param(self, param, val):
         self.param[param] = val
         self.jsv_send_command("PARAM {} {}".format(param, val))
+
     def jsv_del_param(self, param):
         if self.jsv_is_param(param):
             del(self.param[param])
             self.jsv_send_command("PARAM {}".format(param))
+
     def jsv_sub_is_param(self, param, var):
         if self.jsv_is_param(param):
             v = self.jsv_get_param(param)
             if type(v) is dict:
                 return var in v.keys()
         return False
+
     def jsv_sub_get_param(self, param, var):
         if self.jsv_sub_is_param(param, var):
             return self.jsv_get_param(param)[var]
         return None
+
     def jsv_sub_add_param(self, param, var, val):
         if self.jsv_is_param(param):
             self.param[param][var] = val
@@ -211,6 +246,7 @@ class JSV( object ):
                 args.append('='.join(item))
         args = ','.join(args)
         self.jsv_send_command("PARAM {} {}".format(param, args))
+
     def jsv_sub_del_param(self, param, var):
         if self.jsv_is_param(param) and self.jsv_sub_is_param(param, var):
             del(self.param[param][var])
